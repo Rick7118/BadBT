@@ -22,7 +22,7 @@ Using **Windows Raw Input** capture, **12-dimensional keystroke dynamics feature
    - [ONNX Inference & Decision Threshold](#onnx-inference--decision-threshold)
 4. [Post-Detection Keyboard Blocking](#post-detection-keyboard-blocking)
    - [Sequential Keystroke Semantics](#sequential-keystroke-semantics)
-   - [State Machine & Cooldown Recovery](#state-machine--cooldown-recovery)
+   - [State Machine, Device Blocklist & Reset Recovery](#state-machine-device-blocklist--reset-recovery)
    - [Modifier Safety & Hook Design](#modifier-safety--hook-design)
 5. [Process Architecture & Thread Safety](#process-architecture--thread-safety)
 6. [System Flowcharts](#system-flowcharts)
@@ -89,11 +89,11 @@ Sliding Window (W = 25 Keystrokes, Step = 1)
 Feature Extraction (12 Canonical Features)
         |
         v
-ONNX Runtime Random Forest (badbt_rf_v1.onnx)
+ONNX Runtime Random Forest (rf_model.onnx)
         |
         +---> P(injected) < 0.95  ==> Monitoring (Input allowed)
         |
-        +---> P(injected) >= 0.95 ==> ALERT! Cooldown Active & Blocking Engaged
+        +---> P(injected) >= 0.95 ==> ALERT! Device blocklisted & Blocking Engaged (until Reset)
 ```
 
 ### Windows Raw Input & Device Filtering
@@ -127,7 +127,7 @@ A rolling buffer maintains a window of **25 paired keystrokes** ($W=25$, step si
 | `11` | `n_devices_in_window` | Number of distinct input devices contributing to window |
 
 ### ONNX Inference & Decision Threshold
-- Model: Trained **Random Forest Classifier** exported to ONNX format ([`model/badbt_rf_v1.onnx`](file:///D:/projects/capstone/bluetooth2/model/badbt_rf_v1.onnx)).
+- Model: Trained **Random Forest Classifier** exported to ONNX format (`model/rf_model.onnx`).
 - Decision Threshold: **$P(\text{injected}) \ge 0.95$**.
 - Operating with a high decision threshold of 0.95 ensures near-zero false positives during normal high-speed human typing (e.g., coding, gaming, rapid text transcription).
 
@@ -147,18 +147,20 @@ Keys 26+:       BLOCKED immediately (suppressed by WH_KEYBOARD_LL hook)
 > [!NOTE]
 > This is a **post-detection containment mechanism**, not pre-execution prevention. It bounds the damage of automated attacks by immediately halting automated command execution (e.g., stopping an injected script from completing an administrative command string or downloading a second-stage payload).
 
-### State Machine & Cooldown Recovery
+### State Machine, Device Blocklist & Reset Recovery
 The detector operates as a finite state machine:
 
 1. **`Monitoring`**: Default state. Protection is active, Raw Input is monitored, and keystrokes pass through freely.
-2. **`Cooldown`**: Entered immediately when $P(\text{injected}) \ge 0.95$.
+2. **`Blocked`**: Entered immediately when $P(\text{injected}) \ge 0.95$.
+   - The offending device path is added to a **persistent device blocklist** (`%APPDATA%\BadBT\blocklist.txt`, overridable via the `blocklist_path` config key) and saved to disk.
    - `is_blocking_active_` flag is set to `true`.
    - Windows desktop notification alert is displayed.
-   - A **30-second cooldown timer** (`COOLDOWN_TIMER_ID`) is armed on the UI thread.
-   - All subsequent keyboard input (Keys 26+) is suppressed by returning `1` in the hook.
-3. **Recovery (`Cooldown -> Monitoring`)**:
-   - When the 30-second cooldown timer expires, BadBT clears internal pairing state, resets `is_blocking_active_ = false`, and returns to `Monitoring`.
+   - All subsequent keyboard input (Keys 26+) is suppressed by returning `1` in the hook. **Blocking persists until the user clicks Reset** — there is no timed auto-recovery.
+3. **Recovery (`Blocked -> Monitoring`) via Reset**:
+   - The user clicks **Reset Blocklist** in the tray context menu or the **Reset** button in the main window (`TrayApp::reset_blocklist`).
+   - BadBT clears the blocklist (and the on-disk file), clears internal pairing state, resets `is_blocking_active_ = false`, and returns to `Monitoring`.
    - Legitimate keyboard input is immediately restored.
+   - Because the blocklist is persisted and reloaded on startup, a flagged device stays blocked across app restarts until Reset.
 4. **Manual Bypass (`Disabled`)**:
    - If the user clicks "Disable Protection" in the tray context menu or UI dialog, `detection_enabled_` is set to `false`.
    - The hook procedure checks `!app->is_detection_running()` and immediately bypasses blocking (`CallNextHookEx`), restoring manual control.
@@ -201,7 +203,7 @@ BadBT follows a strictly partitioned multi-threaded architecture:
 |  | - Win32 Message Loop (GetMessageW)  |       | - Hidden message window             |  |
 |  | - Owns HWND and Tray Icon           |       | - RegisterRawInputDevices           |  |
 |  | - Installs/Uninstalls Hook          |       | - Device path caching               |  |
-|  | - Owns Cooldown Timer               |       | - Autorepeat filtering              |  |
+|  | - Owns Blocklist + Reset action     |       | - Autorepeat filtering              |  |
 |  | - Renders Status UI                 |       | - Feeds detector->process_event()   |  |
 |  +-------------------------------------+       +-------------------------------------+  |
 |                     ^                                             |                     |
@@ -245,12 +247,12 @@ flowchart TD
     J --> K["ONNX Random Forest Inference"]
     K --> L{"P(injected) >= 0.95?"}
     L -- No --> M["Remain in Monitoring State"]
-    L -- Yes --> N["Engage Blocking (is_blocking_active = true)"]
-    N --> O["Display Tray Balloon Notification"]
-    N --> P["Start 30-Second Cooldown Timer"]
-    P --> Q["Block Subsequent Keystrokes (WH_KEYBOARD_LL)"]
-    Q --> R{"30-Second Timer Expired?"}
-    R -- Yes --> S["Reset Detector State & Unblock Input"]
+    L -- Yes --> N["Add device to blocklist (persist to disk)"]
+    N --> N2["Engage Blocking (is_blocking_active = true)"]
+    N2 --> O["Display Tray Balloon Notification"]
+    N2 --> Q["Block Subsequent Keystrokes (WH_KEYBOARD_LL)"]
+    Q --> R{"User clicks Reset?"}
+    R -- Yes --> S["Clear blocklist, Reset Detector State & Unblock Input"]
     S --> M
 ```
 
@@ -267,15 +269,16 @@ stateDiagram-v2
         Inference --> Listening : P < 0.95
     }
 
-    Monitoring --> Cooldown : P >= 0.95 (Alert Triggered)
-    note right of Cooldown
+    Monitoring --> Blocked : P >= 0.95 (Alert Triggered)
+    note right of Blocked
+        - Device added to blocklist
         - Keyboard Hook active
         - Keys 26+ suppressed
-        - 30s timer running
+        - Persists until Reset
     end note
 
-    Cooldown --> Monitoring : 30-second timer expired
-    Cooldown --> Disabled : User clicks "Disable Protection"
+    Blocked --> Monitoring : User clicks "Reset" (clears blocklist)
+    Blocked --> Disabled : User clicks "Disable Protection"
     Monitoring --> Disabled : User clicks "Disable Protection"
 
     state Disabled {
@@ -313,45 +316,51 @@ flowchart TD
 ```text
 bluetooth2/
 ├── capture/                    # Raw Input capture library & CLI
-│   ├── include/
-│   │   ├── device_info.h       # Windows device path parsing & Bluetooth detection
-│   │   └── raw_input.h         # Raw input window creation & message pump
-│   └── src/
-│       ├── device_info.cpp
-│       ├── raw_input.cpp
-│       └── main.cpp            # badbt-capture.exe tool
+│   └── src/                    # Headers (.h) live alongside sources here
+│       ├── device_info.cpp/.h  # Windows device path parsing & Bluetooth detection
+│       ├── raw_input.cpp/.h     # Raw input window creation & message pump
+│       ├── cli.cpp/.h           # Argument parsing
+│       ├── schema.h             # Event structs
+│       └── main.cpp             # badbt-capture.exe tool
 ├── detector/                   # Core ML inference & detection logic
 │   ├── include/
 │   │   ├── detector.h          # LiveDetector state machine
 │   │   ├── feature_extractor.h # 12-feature sliding window extraction
 │   │   ├── model_runner.h      # ONNX Runtime wrapper
-│   │   └── path_utils.h        # Model path resolution helpers
+│   │   ├── config_loader.h     # config/service.toml reader
+│   │   └── path_utils.h        # Model/config/blocklist path resolution helpers
 │   ├── src/
 │   │   ├── detector.cpp
 │   │   ├── feature_extractor.cpp
 │   │   ├── model_runner.cpp
+│   │   ├── config_loader.cpp
 │   │   ├── path_utils.cpp
 │   │   └── main.cpp            # badbt-detector.exe diagnostic CLI
 │   └── tests/
 │       ├── test_feature_parity.cpp
+│       ├── test_config_loader.cpp
 │       └── test_onnx_inference.cpp
 ├── tray/                       # Production desktop tray daemon & shield
 │   ├── include/
 │   │   ├── notification.h      # Win32 Shell_NotifyIcon helpers
+│   │   ├── blocklist.h         # Persistent device blocklist
 │   │   └── tray_app.h          # TrayApp class, WH_KEYBOARD_LL hook & UI
 │   ├── src/
 │   │   ├── notification.cpp
+│   │   ├── blocklist.cpp
 │   │   ├── tray_app.cpp
 │   │   └── main.cpp            # badbt-tray.exe entry point
 │   └── tests/
-│       └── test_tray_state.cpp # Lifecycle and mock hook test suite
+│       ├── test_tray_state.cpp # Lifecycle, block-until-Reset, blocklist
+│       └── test_blocklist.cpp  # Blocklist unit tests (portable)
 ├── installer/                  # Inno Setup packaging scripts
 │   └── badbt_setup.iss         # Inno Setup 6 installer definition
+├── config/
+│   └── service.toml            # Runtime config (loaded at startup)
 ├── dist/                       # Packaged distribution artifacts
 │   ├── BadBT-1.0.2-Setup.exe   # Final production installer
 │   └── badbt-tray.exe          # Production executable
-├── model/                      # Trained ONNX models
-│   ├── badbt_rf_v1.onnx
+├── model/                      # Trained model (ONNX + joblib)
 │   └── rf_model.onnx
 ├── data/                       # Datasets & offline captures
 │   ├── raw/                    # Offline session logs (*.jsonl)
@@ -402,7 +411,7 @@ Upon completion, all binaries and DLLs will be located in:
 ### Running the Test Suites
 
 #### 1. Unit & State Machine Lifecycle Tests
-Tests hook installation, cooldown recovery, toggle bypass, and callback behavior:
+Tests hook installation, block-until-Reset + device blocklist, toggle bypass, and callback behavior:
 ```powershell
 & "build/tray/test_tray_state.exe"
 ```
@@ -443,8 +452,18 @@ The production application runs quietly in the system tray. Right-clicking the s
 & "build/tray/badbt-tray.exe" --replay data/raw/inj_01_zerodelay_01.jsonl
 
 # Specify a custom ONNX model:
-& "build/tray/badbt-tray.exe" --model model/badbt_rf_v1.onnx
+& "build/tray/badbt-tray.exe" --model model/rf_model.onnx
 ```
+
+#### Configuration (`config/service.toml`)
+
+Both `badbt-tray.exe` and `badbt-detector.exe` read `config/service.toml` at startup (resolved
+next to the executable, up the build tree, or from the current directory). Recognized keys:
+`model_path`, `window_size`, `confidence_threshold`, `cooldown_secs`, `device_filter`
+(non-empty list ⇒ Bluetooth-only filtering), and optional `blocklist_path`. Precedence is
+**built-in defaults → `service.toml` → CLI flags**, so a flag like `--model` always wins over the
+file. When a device is flagged, it is recorded in the device blocklist at
+`%APPDATA%\BadBT\blocklist.txt` (or `blocklist_path`) and input stays blocked until **Reset**.
 
 ### CLI Diagnostic Tool (`badbt-detector.exe`)
 
