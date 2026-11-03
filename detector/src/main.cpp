@@ -7,6 +7,7 @@
 #include <windows.h>
 
 #include "detector.h"
+#include "config_loader.h"
 #include "../../capture/src/raw_input.h"
 #include "../../capture/src/device_info.h"
 
@@ -50,6 +51,17 @@ int main(int argc, char* argv[]) {
     std::string replay_file;
     bool filter_bt = false;
     bool verbose = false;
+
+    // Config precedence: defaults -> config/service.toml (present keys only) -> CLI flags.
+    std::string cfg_path = badbt::find_config_path();
+    badbt::ServiceConfig svc = badbt::parse_service_config(cfg_path);
+    if (svc.found) {
+        if (svc.has_model_path)       config.model_path = svc.model_path;
+        if (svc.has_window_size)      config.window_size = svc.window_size;
+        if (svc.has_threshold)        config.threshold = svc.threshold;
+        if (svc.has_cooldown)         config.cooldown_seconds = svc.cooldown_seconds;
+        if (svc.has_filter_bluetooth) filter_bt = svc.filter_bluetooth;
+    }
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
