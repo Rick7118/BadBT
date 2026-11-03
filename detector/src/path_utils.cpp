@@ -11,6 +11,7 @@
 #endif
 
 #include <iostream>
+#include <cstdlib>
 
 namespace badbt {
 
@@ -52,6 +53,38 @@ std::string get_executable_directory() {
     return ".";
 #else
     return ".";
+#endif
+}
+
+std::string get_appdata_dir() {
+#if defined(_WIN32)
+    wchar_t* appdata = nullptr;
+    size_t len = 0;
+    std::wstring base;
+    if (_wdupenv_s(&appdata, &len, L"APPDATA") == 0 && appdata != nullptr) {
+        base.assign(appdata);
+        free(appdata);
+    }
+    if (base.empty()) {
+        return "."; // %APPDATA% unavailable; caller writes into CWD
+    }
+    std::wstring dir = base + L"\\BadBT";
+    CreateDirectoryW(dir.c_str(), nullptr); // no-op if it already exists
+    return wstring_to_utf8(dir);
+#else
+    return ".";
+#endif
+}
+
+std::string find_blocklist_path(const std::string& override_path) {
+    if (!override_path.empty()) {
+        return override_path;
+    }
+    std::string dir = get_appdata_dir();
+#if defined(_WIN32)
+    return dir + "\\blocklist.txt";
+#else
+    return dir + "/blocklist.txt";
 #endif
 }
 

@@ -5,6 +5,7 @@ add_library(badbt-detector-core STATIC
     src/model_runner.cpp
     src/detector.cpp
     src/path_utils.cpp
+    src/config_loader.cpp
     "${CMAKE_SOURCE_DIR}/capture/src/device_info.cpp"
 )
 
@@ -54,6 +55,31 @@ add_executable(test_feature_parity
 target_include_directories(test_feature_parity PRIVATE
     include
     "${THIRD_PARTY_DIR}"
+)
+
+# ── Test: service.toml config loader (pure C++; no ONNX/Win32 link needed) ──
+add_executable(test_config_loader
+    tests/test_config_loader.cpp
+    src/config_loader.cpp
+    src/path_utils.cpp
+    "${CMAKE_SOURCE_DIR}/capture/src/device_info.cpp"
+)
+
+target_include_directories(test_config_loader PRIVATE
+    include
+    "${THIRD_PARTY_DIR}"
+    "${CMAKE_SOURCE_DIR}/capture/src"
+)
+
+target_link_libraries(test_config_loader PRIVATE
+    user32
+)
+
+target_compile_definitions(test_config_loader PRIVATE
+    NOMINMAX
+    WIN32_LEAN_AND_MEAN
+    UNICODE
+    _UNICODE
 )
 
 # ── Test: ONNX Inference & Replay ──

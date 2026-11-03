@@ -4,6 +4,7 @@ add_executable(badbt-tray
     src/main.cpp
     src/tray_app.cpp
     src/notification.cpp
+    src/blocklist.cpp
     "${CMAKE_SOURCE_DIR}/capture/src/raw_input.cpp"
 )
 
@@ -58,6 +59,7 @@ add_executable(test_tray_state
     tests/test_tray_state.cpp
     src/tray_app.cpp
     src/notification.cpp
+    src/blocklist.cpp
     "${CMAKE_SOURCE_DIR}/capture/src/raw_input.cpp"
 )
 
@@ -104,4 +106,14 @@ add_custom_command(TARGET test_tray_state POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_SOURCE_DIR}/model/rf_model.onnx"
         "$<TARGET_FILE_DIR:test_tray_state>/model/rf_model.onnx"
+)
+
+# ── Test: Blocklist (pure C++; portable, no ONNX/Win32 link) ──
+add_executable(test_blocklist
+    tests/test_blocklist.cpp
+    src/blocklist.cpp
+)
+
+target_include_directories(test_blocklist PRIVATE
+    include
 )
