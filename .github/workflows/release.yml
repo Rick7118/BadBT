@@ -23,6 +23,20 @@ jobs:
           if ($env:GITHUB_REF -like 'refs/tags/v*') { $v = $env:GITHUB_REF_NAME.TrimStart('v') } else { $v = '0.0.0-dev' }
           "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
+      - name: Fetch ONNX Runtime import library
+        # onnxruntime.lib is git-ignored (*.lib); take the exact vendored version (1.20.0) from the official release.
+        shell: pwsh
+        run: |
+          $v = (Get-Content third_party/onnxruntime/VERSION_NUMBER).Trim()
+          $d = Join-Path $env:RUNNER_TEMP 'ort'
+          New-Item -ItemType Directory -Force $d | Out-Null
+          Invoke-WebRequest "https://github.com/microsoft/onnxruntime/releases/download/v$v/onnxruntime-win-x64-$v.zip" -OutFile "$d/ort.zip"
+          Expand-Archive "$d/ort.zip" -DestinationPath $d
+          $src = "$d/onnxruntime-win-x64-$v/lib"
+          Copy-Item "$src/onnxruntime.lib" third_party/onnxruntime/lib/ -Force
+          # Keep DLLs consistent with the import lib
+          Copy-Item "$src/onnxruntime.dll","$src/onnxruntime_providers_shared.dll" third_party/onnxruntime/lib/ -Force
+
       - name: Configure
         run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
 
