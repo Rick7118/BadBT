@@ -69,7 +69,7 @@ jobs:
             if (Test-Path "build/$t/Release") { Copy-Item "build/$t/Release/*" "build/$t/" -Recurse -Force }
           }
           $v = '${{ steps.ver.outputs.version }}' -replace '-.*$',''
-          & "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$v" "/F`"BadBT-${{ steps.ver.outputs.version }}-Setup`"" installer/badbt_setup.iss
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$v" "/F`"BadBT-${{ steps.ver.outputs.version }}-Setup`"" installer/badbt_setup.iss
           if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
           Get-FileHash dist/BadBT-${{ steps.ver.outputs.version }}-Setup.exe -Algorithm SHA256 | Format-List
 
