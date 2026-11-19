@@ -24,15 +24,15 @@ jobs:
           "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Fetch ONNX Runtime import library
-        # onnxruntime.lib is git-ignored (*.lib); take the exact vendored version (1.20.0) from the official release.
+        # onnxruntime.lib is git-ignored (*.lib); take it from the NuGet package of the vendored version.
         shell: pwsh
         run: |
           $v = (Get-Content third_party/onnxruntime/VERSION_NUMBER).Trim()
           $d = Join-Path $env:RUNNER_TEMP 'ort'
           New-Item -ItemType Directory -Force $d | Out-Null
-          Invoke-WebRequest "https://github.com/microsoft/onnxruntime/releases/download/v$v/onnxruntime-win-x64-$v.zip" -OutFile "$d/ort.zip"
-          Expand-Archive "$d/ort.zip" -DestinationPath $d
-          $src = "$d/onnxruntime-win-x64-$v/lib"
+          Invoke-WebRequest "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/$v/microsoft.ml.onnxruntime.$v.nupkg" -OutFile "$d/ort.zip"
+          Expand-Archive "$d/ort.zip" -DestinationPath "$d/x"
+          $src = "$d/x/runtimes/win-x64/native"
           Copy-Item "$src/onnxruntime.lib" third_party/onnxruntime/lib/ -Force
           # Keep DLLs consistent with the import lib
           Copy-Item "$src/onnxruntime.dll","$src/onnxruntime_providers_shared.dll" third_party/onnxruntime/lib/ -Force
