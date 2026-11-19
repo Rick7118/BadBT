@@ -27,4 +27,14 @@ std::wstring utf8_to_wstring(const std::string& str);
 // Checks if a file exists on disk
 bool file_exists(const std::string& path);
 
+// Returns the per-user BadBT application-data directory (e.g. %APPDATA%\BadBT),
+// creating it if necessary. Falls back to the current directory if %APPDATA% is
+// unavailable. Off-Windows (build-only), returns ".".
+std::string get_appdata_dir();
+
+// Resolves the path of the persisted device blocklist file.
+//   1. Explicit override if provided (used verbatim; parent dir assumed to exist)
+//   2. Otherwise <appdata>/blocklist.txt  (<appdata> is get_appdata_dir())
+std::string find_blocklist_path(const std::string& override_path = "");
+
 } // namespace badbt

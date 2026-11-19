@@ -20,7 +20,8 @@ You should see `(venv)` appear at the start of your prompt.
 
 ## 4. Install the required packages
 ```powershell
-pip install jupyter pandas numpy scipy scikit-learn matplotlib joblib
+pip install -r requirements.txt   # pinned versions (run from the repo root)
+pip install jupyter matplotlib    # notebook UI + plots (not in requirements.txt)
 ```
 
 ## Project layout — one data folder, not two
@@ -32,10 +33,12 @@ inside `ml/` anymore, so editing/regenerating data only ever needs to happen in 
 **⚠️ The pretrained models currently in `model/*.joblib` were trained before this fix**
 (old window size of 25, and 16 human capture files that were mislabeled under one shared
 `session_id`/`subject_id`). Those raw files have now been corrected (see repo notes / your
-own change log) and the window size changed to 20 to match `config/service.toml`. **You
-need to re-run notebooks 1, 2, and 5 to regenerate `features.csv` and every `model/*.joblib`
-file before trusting any prediction** — the old saved models and the old `outputs/*` plots
-and reports reflect the pre-fix data and are now stale.
+own change log). The window size is **25** everywhere that matters — it is the default in both
+`data/build_features.py` and `detector/include/feature_extractor.h`, and `config/service.toml`
+and `model/model_meta.json` also say 25. (Earlier revisions of this file mentioned 20; that was
+doc-rot — trust the code default of 25.) **You need to re-run notebooks 1, 2, and 5 to regenerate
+`features.csv` and every `model/*.joblib` file before trusting any prediction** — the old saved
+models and the old `outputs/*` plots and reports reflect the pre-fix data and are now stale.
 
 ## 5. Launch Jupyter
 ```powershell
@@ -46,9 +49,9 @@ in order:
 
 1. **`01_build_features.ipynb`** — turns raw `.jsonl` logs from `../data/raw` into
    `../data/processed/features.csv`. **Re-run this now** — the underlying raw data changed.
-2. **`02_train_model.ipynb`** — trains the Random Forest on `features.csv` and saves it to
+2. **`02_train_model Rf.ipynb`** — trains the Random Forest on `features.csv` and saves it to
    `model/rf_model.joblib`. **Re-run this now** too, for the same reason.
-3. **`03_predict.ipynb`** — classifies a new raw log. This is the one you'll actually use
+3. **`03_predict Rf.ipynb`** — classifies a new raw log. This is the one you'll actually use
    day-to-day. Change the `RAW_LOG_PATH` variable in the second cell to point at whatever
    session you want to check, then run all cells (`Cell → Run All` in the menu, or
    `Shift+Enter` through each one).
@@ -70,7 +73,7 @@ repeatedly, or use the menu **Cell → Run All**.
 - `outputs/` — evaluation plots/report (will be re-created once you re-run notebook 2)
 
 ## Classifying a log from your C++ capture tool
-Point `RAW_LOG_PATH` in `03_predict.ipynb` at the `.jsonl` file your `badbt-capture.exe`
+Point `RAW_LOG_PATH` in `03_predict Rf.ipynb` at the `.jsonl` file your `badbt-capture.exe`
 tool wrote, run the notebook, and read the verdict + per-window probability plot at the
 bottom. There's also a cell further down that scans a whole folder of `.jsonl` files at once
 if you want to batch-check a session archive — just change `RAW_DIR_TO_SCAN`.

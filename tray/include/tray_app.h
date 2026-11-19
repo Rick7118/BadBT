@@ -16,6 +16,7 @@
 #include <thread>
 #include <memory>
 #include "../../detector/include/detector.h"
+#include "blocklist.h"
 
 namespace badbt {
 
@@ -30,14 +31,17 @@ constexpr UINT IDM_STATUS            = 1001;
 constexpr UINT IDM_TOGGLE            = 1002;
 constexpr UINT IDM_TEST_NOTIFICATION = 1003;
 constexpr UINT IDM_EXIT              = 1004;
+constexpr UINT IDM_RESET_BLOCKLIST   = 1005;
 
 constexpr UINT IDC_BTN_TOGGLE        = 2001;
 constexpr UINT IDC_BTN_TEST_ALERT    = 2002;
 constexpr UINT IDC_BTN_EXIT          = 2003;
+constexpr UINT IDC_BTN_RESET         = 2004;
 
 constexpr UINT IDC_STATUS_VALUE      = 2010;
 constexpr UINT IDC_STATE_DETAIL      = 2011;
 constexpr UINT IDC_LAST_DETECT_VALUE = 2012;
+constexpr UINT IDC_BLOCKED_VALUE     = 2013;
 
 constexpr UINT TRAY_ICON_UID         = 1;
 constexpr UINT_PTR AUTO_EXIT_TIMER_ID= 101;
@@ -50,11 +54,13 @@ struct TrayConfig {
     std::string replay_file = "";
     bool        test_notification_on_start = false;
     int         auto_exit_seconds = 0; // 0 = run indefinitely
+    size_t      window_size = 25;
     float       threshold = 0.95f;
     double      cooldown_seconds = 30.0;
     bool        start_minimized = false;
     bool        enable_capture_thread = true; // Set false for deterministic unit tests
     bool        enable_keyboard_hook = true;  // Set false to skip SetWindowsHookExW in tests if desired
+    std::string blocklist_path = "";          // Override persisted blocklist path (default: %APPDATA%\BadBT\blocklist.txt)
 };
 
 class TrayApp {
@@ -77,6 +83,10 @@ public:
     // Toggle detection on/off
     void toggle_detection();
 
+    // Clear the device blocklist, lift keyboard blocking, and return to Monitoring.
+    // This is the user-facing recovery action (tray "Reset Blocklist" / window "Reset").
+    void reset_blocklist();
+
     // Show or restore main window
     void show_main_window();
 
@@ -90,6 +100,8 @@ public:
     HHOOK keyboard_hook() const { return hook_; }
     size_t total_alerts() const { return total_alerts_.load(); }
     size_t total_windows() const { return total_windows_.load(); }
+    size_t blocklist_size() const { return blocklist_.size(); }
+    const Blocklist& blocklist() const { return blocklist_; }
     HWND hwnd() const { return hwnd_; }
     LiveDetector* detector() const { return detector_.get(); }
     void reset_capture_state() { reset_capture_state_.store(true); }
@@ -124,10 +136,13 @@ private:
     HWND hwnd_state_detail_ = nullptr;
     HWND hwnd_last_detect_lbl_ = nullptr;
     HWND hwnd_last_detect_val_ = nullptr;
+    HWND hwnd_blocked_lbl_ = nullptr;
+    HWND hwnd_blocked_val_ = nullptr;
     HWND hwnd_policy_lbl_ = nullptr;
     HWND hwnd_policy_val_ = nullptr;
     HWND hwnd_btn_toggle_ = nullptr;
     HWND hwnd_btn_test_alert_ = nullptr;
+    HWND hwnd_btn_reset_ = nullptr;
     HWND hwnd_btn_exit_ = nullptr;
     HWND hwnd_footer_ = nullptr;
 
@@ -158,6 +173,13 @@ private:
     std::unique_ptr<LiveDetector> detector_;
     std::thread capture_thread_;
     HWND hwnd_capture_ = nullptr;
+
+    // Persistent device blocklist + its on-disk location.
+    Blocklist   blocklist_;
+    std::string blocklist_path_;
+
+    // Refresh the "Blocked devices: N" line and tray tooltip from the current blocklist.
+    void update_blocked_display();
 };
 
 } // namespace badbt

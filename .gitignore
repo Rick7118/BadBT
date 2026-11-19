@@ -42,3 +42,12 @@ __pycache__/
 *.swp
 Thumbs.db
 Desktop.ini
+.DS_Store
+
+# Tool/editor state
+.serena/
+
+# Test temp artifacts (written to CWD by unit tests)
+test_blocklist_tmp_*.txt
+test_tray_blocklist_tmp.txt
+test_service_toml_tmp.toml
