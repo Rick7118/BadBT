@@ -4,6 +4,7 @@
 #include <windows.h>
 
 #include "tray_app.h"
+#include "config_loader.h"
 
 static void print_usage(const char* prog) {
     std::cout << "BadBT Windows System Tray Application\n\n"
@@ -19,10 +20,20 @@ static void print_usage(const char* prog) {
 }
 
 int main(int argc, char* argv[]) {
-    badbt::TrayConfig config;
-    config.filter_bluetooth = true;
-    config.threshold = 0.95f;
-    config.cooldown_seconds = 30.0;
+    badbt::TrayConfig config; // built-in defaults
+
+    // Config precedence: defaults -> config/service.toml (present keys only) -> CLI flags.
+    std::string cfg_path = badbt::find_config_path();
+    badbt::ServiceConfig svc = badbt::parse_service_config(cfg_path);
+    if (svc.found) {
+        if (svc.has_model_path)       config.model_path = svc.model_path;
+        if (svc.has_window_size)      config.window_size = svc.window_size;
+        if (svc.has_threshold)        config.threshold = svc.threshold;
+        if (svc.has_cooldown)         config.cooldown_seconds = svc.cooldown_seconds;
+        if (svc.has_filter_bluetooth) config.filter_bluetooth = svc.filter_bluetooth;
+        if (svc.has_blocklist_path)   config.blocklist_path = svc.blocklist_path;
+        std::cout << "Config file:      " << cfg_path << "\n";
+    }
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];

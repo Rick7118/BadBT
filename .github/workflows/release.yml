@@ -1,0 +1,77 @@
+name: Release (Windows installer)
+
+# Push a tag like v1.1.0 to build the installer and publish a GitHub Release.
+# "Run workflow" (manual) builds and uploads the installer as a workflow artifact only.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: ver
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF -like 'refs/tags/v*') { $v = $env:GITHUB_REF_NAME.TrimStart('v') } else { $v = '0.0.0-dev' }
+          "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Configure
+        run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Tests (headless-safe ones)
+        # test_tray_state installs a global keyboard hook, so it is skipped on CI.
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dirs = @{
+            'build/tray/Release/test_blocklist.exe'            = 'build/tray/test_blocklist.exe'
+            'build/detector/Release/test_config_loader.exe'    = 'build/detector/test_config_loader.exe'
+            'build/detector/Release/test_feature_parity.exe'   = 'build/detector/test_feature_parity.exe'
+            'build/detector/Release/test_onnx_inference.exe'   = 'build/detector/test_onnx_inference.exe'
+          }
+          foreach ($k in $dirs.Keys) {
+            $exe = if (Test-Path $k) { $k } else { $dirs[$k] }
+            Write-Host "== $exe"
+            & $exe
+            if ($LASTEXITCODE -ne 0) { throw "$exe failed ($LASTEXITCODE)" }
+          }
+
+      - name: Build installer (Inno Setup)
+        shell: pwsh
+        run: |
+          # The .iss expects binaries at build/<target>/ (no Release/ subfolder).
+          foreach ($t in 'tray','detector') {
+            if (Test-Path "build/$t/Release") { Copy-Item "build/$t/Release/*" "build/$t/" -Recurse -Force }
+          }
+          $v = '${{ steps.ver.outputs.version }}' -replace '-.*$',''
+          & "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$v" "/F`"BadBT-${{ steps.ver.outputs.version }}-Setup`"" installer/badbt_setup.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
+          Get-FileHash dist/BadBT-${{ steps.ver.outputs.version }}-Setup.exe -Algorithm SHA256 | Format-List
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BadBT-${{ steps.ver.outputs.version }}-Setup
+          path: dist/BadBT-${{ steps.ver.outputs.version }}-Setup.exe
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/BadBT-${{ steps.ver.outputs.version }}-Setup.exe
+          generate_release_notes: true
+          body: |
+            **Windows 10/11 x64.** Download `BadBT-${{ steps.ver.outputs.version }}-Setup.exe` below and run it (no admin rights needed).
+
+            The installer is not code-signed, so Windows SmartScreen may show "Windows protected your PC":
+            click **More info → Run anyway**.

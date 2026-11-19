@@ -3,6 +3,7 @@
 #include <fstream>
 #include <cassert>
 #include <iomanip>
+#include <cstdio>
 #include <nlohmann/json.hpp>
 #include "../include/tray_app.h"
 #include "../include/notification.h"
@@ -65,6 +66,11 @@ int main() {
     std::cout << "  TEST: BadBT UI, Lifecycle & Post-Detection Blocking   \n";
     std::cout << "========================================================\n";
 
+    // Use a dedicated temp blocklist file so the test is deterministic and never touches
+    // the user's real %APPDATA%\BadBT\blocklist.txt. Start from a clean slate.
+    const char* kBlocklistPath = "test_tray_blocklist_tmp.txt";
+    std::remove(kBlocklistPath);
+
     // Configure TrayApp for deterministic synchronous testing
     badbt::TrayConfig config;
     config.auto_exit_seconds = 0;
@@ -72,6 +78,7 @@ int main() {
     config.start_minimized = true;
     config.enable_capture_thread = false; // Synchronous, deterministic testing
     config.enable_keyboard_hook = true;   // Test WH_KEYBOARD_LL hook registration
+    config.blocklist_path = kBlocklistPath;
 
     badbt::TrayApp app(config);
     bool init_ok = app.initialize();
@@ -84,6 +91,7 @@ int main() {
     assert(app.is_blocking_active() == false);
     assert(app.current_status_string() == L"Monitoring");
     assert(app.last_alert_time_string() == L"None");
+    assert(app.blocklist_size() == 0);
 
     SendMessageW(app.hwnd(), WM_COMMAND, MAKEWPARAM(badbt::IDC_BTN_TEST_ALERT, 0), 0);
     bool notif_ok = badbt::show_tray_notification(
@@ -120,9 +128,9 @@ int main() {
     std::cout << ">>> TEST 1 PASSED: Normal typing produces 0 alerts, blocking is false, keys allowed.\n";
 
     // ─────────────────────────────────────────────────────────────────
-    // TEST 2: Injection replay reaches detection -> Cooldown -> blocking becomes true
+    // TEST 2: Injection replay reaches detection -> device blocklisted -> blocking becomes true
     // ─────────────────────────────────────────────────────────────────
-    std::cout << "\n[TEST 2] Injection replay -> Alert & Cooldown -> blocking becomes true...\n";
+    std::cout << "\n[TEST 2] Injection replay -> Alert -> device blocklisted -> blocking becomes true...\n";
     auto inj_events = load_events("data/raw/inj_01_zerodelay_01.jsonl", 100); // 100 events = 50 paired keys
     assert(inj_events.size() == 100);
 
@@ -132,11 +140,12 @@ int main() {
     pump_ui_messages(app.hwnd());
 
     std::cout << "  - Attack 1 alerts triggered:    " << app.total_alerts() << "\n";
+    std::cout << "  - Blocklisted devices:          " << app.blocklist_size() << "\n";
     assert(app.total_alerts() == 1);
-    assert(app.detector()->state() == badbt::DetectorState::Cooldown);
-    assert(app.current_status_string() == L"Cooldown");
+    assert(app.current_status_string() == L"Blocked");
     assert(app.is_blocking_active() == true);
-    std::cout << ">>> TEST 2 PASSED: Alert triggered, detector entered Cooldown, blocking activated.\n";
+    assert(app.blocklist_size() == 1); // offending device recorded + persisted
+    std::cout << ">>> TEST 2 PASSED: Alert triggered, device added to blocklist, blocking activated.\n";
 
     // ─────────────────────────────────────────────────────────────────
     // TEST 3: While blocking: normal KEYDOWN -> hook returns 1
@@ -211,24 +220,25 @@ int main() {
     std::cout << ">>> TEST 6 PASSED: All modifier KEYUP events passed through safely (prevent stuck modifiers).\n";
 
     // ─────────────────────────────────────────────────────────────────
-    // TEST 7: Cooldown timer expires -> detector returns to Monitoring -> blocking false -> input allowed
+    // TEST 7: Reset clears the blocklist -> Monitoring -> blocking false -> input allowed
     // ─────────────────────────────────────────────────────────────────
-    std::cout << "\n[TEST 7] Cooldown timer expires -> Monitoring -> blocking false -> input allowed...\n";
-    SendMessageW(app.hwnd(), WM_TIMER, badbt::COOLDOWN_TIMER_ID, 0);
+    std::cout << "\n[TEST 7] Reset blocklist -> Monitoring -> blocking false -> input allowed...\n";
+    SendMessageW(app.hwnd(), WM_COMMAND, MAKEWPARAM(badbt::IDC_BTN_RESET, 0), 0);
 
     assert(app.detector()->state() == badbt::DetectorState::Monitoring);
     assert(app.current_status_string() == L"Monitoring");
     assert(app.is_blocking_active() == false);
+    assert(app.blocklist_size() == 0); // Reset cleared the blocklist
 
     // Keyboard input must be allowed now
     assert(simulate_hook_event('A', WM_KEYDOWN) == 0);
     assert(simulate_hook_event('A', WM_KEYUP) == 0);
-    std::cout << ">>> TEST 7 PASSED: Cooldown expired cleanly, blocking disabled, input allowed again.\n";
+    std::cout << ">>> TEST 7 PASSED: Reset cleared the blocklist, blocking disabled, input allowed again.\n";
 
     // ─────────────────────────────────────────────────────────────────
-    // TEST 8: Second attack after cooldown -> detection occurs again -> blocking becomes true again
+    // TEST 8: Second attack after Reset -> detection occurs again -> blocking becomes true again
     // ─────────────────────────────────────────────────────────────────
-    std::cout << "\n[TEST 8] Second attack after cooldown -> detection occurs -> blocking becomes true again...\n";
+    std::cout << "\n[TEST 8] Second attack after Reset -> detection occurs -> blocking becomes true again...\n";
     int64_t shift_ns = 35LL * 1'000'000'000LL;
     int64_t t_offset = (inj_events.back().timestamp_ns + shift_ns) - inj_events.front().timestamp_ns;
 
@@ -241,17 +251,18 @@ int main() {
 
     std::cout << "  - Total alerts after Attack 2:  " << app.total_alerts() << "\n";
     assert(app.total_alerts() == 2);
-    assert(app.detector()->state() == badbt::DetectorState::Cooldown);
-    assert(app.current_status_string() == L"Cooldown");
+    assert(app.current_status_string() == L"Blocked");
     assert(app.is_blocking_active() == true);
+    assert(app.blocklist_size() == 1); // same device re-added (deduped to 1)
 
     // Verify blocking is active again
     assert(simulate_hook_event('B', WM_KEYDOWN) == 1);
     std::cout << ">>> TEST 8 PASSED: Second attack successfully re-armed blocking.\n";
 
-    // Reset cooldown before next test
-    SendMessageW(app.hwnd(), WM_TIMER, badbt::COOLDOWN_TIMER_ID, 0);
+    // Reset before next test
+    SendMessageW(app.hwnd(), WM_COMMAND, MAKEWPARAM(badbt::IDC_BTN_RESET, 0), 0);
     assert(app.is_blocking_active() == false);
+    assert(app.blocklist_size() == 0);
 
     // ─────────────────────────────────────────────────────────────────
     // TEST 9: Protection disabled -> blocking false -> hook allows keyboard input even in blocking condition
@@ -267,9 +278,12 @@ int main() {
     assert(simulate_hook_event('A', WM_KEYDOWN) == 0);
     assert(simulate_hook_event('A', WM_KEYUP) == 0);
 
-    // Replay attack events while disabled: should be ignored, 0 new alerts, blocking remains false
+    // Replay attack events while disabled: the real capture loop gates feeding on
+    // detection_enabled_, so mirror that here. Expect 0 new alerts, blocking stays false.
     for (const auto& ev : inj_events) {
-        app.detector()->process_event(ev);
+        if (app.is_detection_running()) {
+            app.detector()->process_event(ev);
+        }
     }
     pump_ui_messages(app.hwnd());
     assert(app.total_alerts() == 2); // Unchanged
@@ -300,8 +314,8 @@ int main() {
 
     std::cout << "  - Total alerts after Attack 3:  " << app.total_alerts() << "\n";
     assert(app.total_alerts() == 3);
-    assert(app.detector()->state() == badbt::DetectorState::Cooldown);
     assert(app.is_blocking_active() == true);
+    assert(app.blocklist_size() == 1);
     assert(simulate_hook_event('C', WM_KEYDOWN) == 1);
     std::cout << ">>> TEST 10 PASSED: Protection re-enabled cleanly resumes monitoring and blocking.\n";
 
@@ -323,6 +337,8 @@ int main() {
     assert(post_shutdown_up == 0);
     std::cout << "  - Post-shutdown hook call:      SAFE (returned 0, no crash)\n";
     std::cout << ">>> TEST 11 PASSED: Shutdown cleanly removed hook, cleared state, and neutralized callbacks.\n";
+
+    std::remove(kBlocklistPath); // clean up the temp blocklist file
 
     std::cout << "\n========================================================\n";
     std::cout << "      ALL 11 BLOCKING & LIFECYCLE TESTS 100% PASSED!    \n";

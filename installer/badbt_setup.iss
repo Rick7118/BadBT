@@ -2,7 +2,9 @@
 ; Production Windows Installer Configuration
 
 #define MyAppName "BadBT Keystroke Injection Shield"
-#define MyAppVersion "1.0.1"
+#ifndef MyAppVersion
+  #define MyAppVersion "1.1.0"
+#endif
 #define MyAppPublisher "BadBT Security"
 #define MyAppExeName "badbt-tray.exe"
 #define MyAppCliName "badbt-detector.exe"
@@ -45,6 +47,9 @@ Source: "..\build\detector\{#MyAppCliName}"; DestDir: "{app}"; Flags: ignorevers
 ; ONNX Runtime Engine DLLs
 Source: "..\build\tray\onnxruntime.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\build\tray\onnxruntime_providers_shared.dll"; DestDir: "{app}"; Flags: ignoreversion
+
+; Default runtime config (kept if the user already edited it)
+Source: "..\config\service.toml"; DestDir: "{app}\config"; Flags: onlyifdoesntexist
 
 ; Trained Canonical Random Forest ONNX Model (W=25, 12 features)
 Source: "..\build\tray\model\rf_model.onnx"; DestDir: "{app}\model"; Flags: ignoreversion

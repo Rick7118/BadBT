@@ -123,7 +123,7 @@ bool TrayApp::initialize() {
     int screen_w = GetSystemMetrics(SM_CXSCREEN);
     int screen_h = GetSystemMetrics(SM_CYSCREEN);
     int win_w = 440;
-    int win_h = 360;
+    int win_h = 420;
     int win_x = (screen_w - win_w) / 2;
     int win_y = (screen_h - win_h) / 2;
 
@@ -160,7 +160,7 @@ bool TrayApp::initialize() {
         WS_CHILD | WS_VISIBLE | SS_LEFT, 24, 38, 380, 18, hwnd_, nullptr, hInstance, nullptr);
 
     hwnd_group_ = CreateWindowExW(0, L"BUTTON", L" Protection Status ",
-        WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 20, 60, 390, 178, hwnd_, nullptr, hInstance, nullptr);
+        WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 20, 60, 390, 212, hwnd_, nullptr, hInstance, nullptr);
 
     hwnd_status_lbl_ = CreateWindowExW(0, L"STATIC", L"Protection Status:",
         WS_CHILD | WS_VISIBLE | SS_LEFT, 36, 84, 124, 20, hwnd_, nullptr, hInstance, nullptr);
@@ -177,20 +177,27 @@ bool TrayApp::initialize() {
     hwnd_last_detect_val_ = CreateWindowExW(0, L"STATIC", L"None",
         WS_CHILD | WS_VISIBLE | SS_LEFT, 165, 154, 230, 20, hwnd_, reinterpret_cast<HMENU>(IDC_LAST_DETECT_VALUE), hInstance, nullptr);
 
-    hwnd_policy_lbl_ = CreateWindowExW(0, L"STATIC", L"Detection Policy:",
+    hwnd_blocked_lbl_ = CreateWindowExW(0, L"STATIC", L"Blocked Devices:",
         WS_CHILD | WS_VISIBLE | SS_LEFT, 36, 182, 124, 20, hwnd_, nullptr, hInstance, nullptr);
-    hwnd_policy_val_ = CreateWindowExW(0, L"STATIC", L"25 keys | P >= 0.95 | 30s Cooldown",
-        WS_CHILD | WS_VISIBLE | SS_LEFT, 165, 182, 230, 20, hwnd_, nullptr, hInstance, nullptr);
+    hwnd_blocked_val_ = CreateWindowExW(0, L"STATIC", L"0",
+        WS_CHILD | WS_VISIBLE | SS_LEFT, 165, 182, 230, 20, hwnd_, reinterpret_cast<HMENU>(IDC_BLOCKED_VALUE), hInstance, nullptr);
+
+    hwnd_policy_lbl_ = CreateWindowExW(0, L"STATIC", L"Detection Policy:",
+        WS_CHILD | WS_VISIBLE | SS_LEFT, 36, 210, 124, 20, hwnd_, nullptr, hInstance, nullptr);
+    hwnd_policy_val_ = CreateWindowExW(0, L"STATIC", L"25 keys | P >= 0.95 | Block until Reset",
+        WS_CHILD | WS_VISIBLE | SS_LEFT, 165, 210, 230, 20, hwnd_, nullptr, hInstance, nullptr);
 
     hwnd_btn_toggle_ = CreateWindowExW(0, L"BUTTON", L"Disable Protection",
-        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP, 20, 248, 146, 32, hwnd_, reinterpret_cast<HMENU>(IDC_BTN_TOGGLE), hInstance, nullptr);
+        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP, 20, 286, 100, 32, hwnd_, reinterpret_cast<HMENU>(IDC_BTN_TOGGLE), hInstance, nullptr);
     hwnd_btn_test_alert_ = CreateWindowExW(0, L"BUTTON", L"Test Alert",
-        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP, 174, 248, 110, 32, hwnd_, reinterpret_cast<HMENU>(IDC_BTN_TEST_ALERT), hInstance, nullptr);
+        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP, 126, 286, 86, 32, hwnd_, reinterpret_cast<HMENU>(IDC_BTN_TEST_ALERT), hInstance, nullptr);
+    hwnd_btn_reset_ = CreateWindowExW(0, L"BUTTON", L"Reset",
+        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP, 218, 286, 86, 32, hwnd_, reinterpret_cast<HMENU>(IDC_BTN_RESET), hInstance, nullptr);
     hwnd_btn_exit_ = CreateWindowExW(0, L"BUTTON", L"Exit",
-        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP, 292, 248, 118, 32, hwnd_, reinterpret_cast<HMENU>(IDC_BTN_EXIT), hInstance, nullptr);
+        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP, 310, 286, 86, 32, hwnd_, reinterpret_cast<HMENU>(IDC_BTN_EXIT), hInstance, nullptr);
 
     hwnd_footer_ = CreateWindowExW(0, L"STATIC", L"BadBT v1.0 • System Tray Active",
-        WS_CHILD | WS_VISIBLE | SS_CENTER, 20, 290, 390, 16, hwnd_, nullptr, hInstance, nullptr);
+        WS_CHILD | WS_VISIBLE | SS_CENTER, 20, 334, 390, 16, hwnd_, nullptr, hInstance, nullptr);
 
     // Apply fonts
     SendMessageW(hwnd_title_, WM_SETFONT, reinterpret_cast<WPARAM>(hfont_title_), TRUE);
@@ -202,10 +209,13 @@ bool TrayApp::initialize() {
     SendMessageW(hwnd_state_detail_, WM_SETFONT, reinterpret_cast<WPARAM>(hfont_normal_), TRUE);
     SendMessageW(hwnd_last_detect_lbl_, WM_SETFONT, reinterpret_cast<WPARAM>(hfont_bold_), TRUE);
     SendMessageW(hwnd_last_detect_val_, WM_SETFONT, reinterpret_cast<WPARAM>(hfont_normal_), TRUE);
+    SendMessageW(hwnd_blocked_lbl_, WM_SETFONT, reinterpret_cast<WPARAM>(hfont_bold_), TRUE);
+    SendMessageW(hwnd_blocked_val_, WM_SETFONT, reinterpret_cast<WPARAM>(hfont_normal_), TRUE);
     SendMessageW(hwnd_policy_lbl_, WM_SETFONT, reinterpret_cast<WPARAM>(hfont_normal_), TRUE);
     SendMessageW(hwnd_policy_val_, WM_SETFONT, reinterpret_cast<WPARAM>(hfont_normal_), TRUE);
     SendMessageW(hwnd_btn_toggle_, WM_SETFONT, reinterpret_cast<WPARAM>(hfont_normal_), TRUE);
     SendMessageW(hwnd_btn_test_alert_, WM_SETFONT, reinterpret_cast<WPARAM>(hfont_normal_), TRUE);
+    SendMessageW(hwnd_btn_reset_, WM_SETFONT, reinterpret_cast<WPARAM>(hfont_normal_), TRUE);
     SendMessageW(hwnd_btn_exit_, WM_SETFONT, reinterpret_cast<WPARAM>(hfont_normal_), TRUE);
     SendMessageW(hwnd_footer_, WM_SETFONT, reinterpret_cast<WPARAM>(hfont_normal_), TRUE);
 
@@ -235,9 +245,17 @@ bool TrayApp::initialize() {
         return false;
     }
 
-    // 7. Initialize LiveDetector with canonical settings
+    // 7a. Resolve + load the persistent device blocklist. If devices are already
+    //     blocklisted from a previous run, start in the blocked state immediately.
+    blocklist_path_ = find_blocklist_path(config_.blocklist_path);
+    blocklist_.load(blocklist_path_);
+    if (!blocklist_.empty()) {
+        is_blocking_active_.store(true, std::memory_order_release);
+    }
+
+    // 7b. Initialize LiveDetector with configured settings
     DetectorConfig d_cfg;
-    d_cfg.window_size = 25;
+    d_cfg.window_size = config_.window_size;
     d_cfg.window_step = 1;
     d_cfg.threshold = config_.threshold;
     d_cfg.cooldown_seconds = config_.cooldown_seconds;
@@ -252,6 +270,14 @@ bool TrayApp::initialize() {
     detector_->set_detection_callback([this](const DetectionResult& res) {
         total_windows_++;
         if (res.alert_triggered) {
+            // Record the offending device on the persistent blocklist, then engage
+            // blocking. Enforcement stays global (the hook cannot act per-device), so
+            // is_blocking_active_ is the authoritative lock-free gate; the blocklist is
+            // the durable record of why input is blocked until the user hits Reset.
+            if (!res.primary_device_path.empty()) {
+                blocklist_.add(res.primary_device_path);
+                blocklist_.save(blocklist_path_);
+            }
             is_blocking_active_.store(true, std::memory_order_release);
             total_alerts_++;
             if (hwnd_) {
@@ -348,8 +374,10 @@ std::wstring TrayApp::current_status_string() const {
     if (!detection_enabled_.load()) {
         return L"Disabled";
     }
-    if (detector_ && detector_->state() == DetectorState::Cooldown) {
-        return L"Cooldown";
+    // Under the block-until-Reset model, is_blocking_active_ is the authoritative signal
+    // (not the detector's transient Cooldown state, which auto-expires on later events).
+    if (is_blocking_active_.load(std::memory_order_acquire)) {
+        return L"Blocked";
     }
     return L"Monitoring";
 }
@@ -357,7 +385,11 @@ std::wstring TrayApp::current_status_string() const {
 void TrayApp::update_ui_state() {
     if (!hwnd_) return;
 
-    if (detector_ && detector_->state() == DetectorState::Monitoring && is_blocking_active_.load(std::memory_order_acquire)) {
+    // Safety cleanup: clear a stale blocking flag only when nothing is blocklisted.
+    // While the blocklist is non-empty, blocking persists until the user hits Reset,
+    // regardless of the detector's own (auto-expiring) Cooldown state.
+    if (detector_ && detector_->state() == DetectorState::Monitoring
+        && is_blocking_active_.load(std::memory_order_acquire) && blocklist_.empty()) {
         is_blocking_active_.store(false, std::memory_order_release);
     }
 
@@ -368,8 +400,8 @@ void TrayApp::update_ui_state() {
     if (status_str == L"Disabled") {
         detail_str = L"Protection is paused. Keyboard input is not monitored.";
         toggle_str = L"Enable Protection";
-    } else if (status_str == L"Cooldown") {
-        detail_str = L"Injection detected! 30-second alert cooldown active. Resets upon expiry.";
+    } else if (status_str == L"Blocked") {
+        detail_str = L"Injection detected! Device blocklisted. Input blocked until you click Reset.";
         toggle_str = L"Disable Protection";
     } else {
         detail_str = L"Active - Monitoring Bluetooth keystrokes in real-time.";
@@ -390,7 +422,33 @@ void TrayApp::update_ui_state() {
         SetWindowTextW(hwnd_btn_toggle_, toggle_str.c_str());
     }
 
+    update_blocked_display();
     update_tray_tooltip();
+}
+
+void TrayApp::update_blocked_display() {
+    if (!hwnd_blocked_val_) return;
+
+    size_t n = blocklist_.size();
+    std::wstring text;
+    if (n == 0) {
+        text = L"0";
+    } else {
+        // Show the count plus a trailing fragment of the most recent device path,
+        // which is long and ugly in full — enough to recognize, not to overflow.
+        std::string last = blocklist_.last_added();
+        if (last.empty()) {
+            std::vector<std::string> es = blocklist_.entries();
+            if (!es.empty()) last = es.back();
+        }
+        std::wstring last_w = utf8_to_wstring(last);
+        constexpr size_t kMaxTail = 40;
+        if (last_w.size() > kMaxTail) {
+            last_w = L"..." + last_w.substr(last_w.size() - kMaxTail);
+        }
+        text = std::to_wstring(n) + L" (" + last_w + L")";
+    }
+    SetWindowTextW(hwnd_blocked_val_, text.c_str());
 }
 
 void TrayApp::toggle_detection() {
@@ -405,7 +463,9 @@ void TrayApp::toggle_detection() {
         detector_->reset_detection_state();
     }
     reset_capture_state_.store(true);
-    is_blocking_active_.store(false, std::memory_order_release);
+    // Disabling is a manual bypass (hook passes input through). When re-enabling, keep
+    // input blocked if devices are still blocklisted — only Reset clears a standing block.
+    is_blocking_active_.store(next && !blocklist_.empty(), std::memory_order_release);
     update_ui_state();
 
     if (next) {
@@ -423,13 +483,37 @@ void TrayApp::toggle_detection() {
     }
 }
 
+void TrayApp::reset_blocklist() {
+    // Clear the persistent blocklist, lift blocking, and return to Monitoring.
+    blocklist_.clear();
+    blocklist_.save(blocklist_path_);
+
+    if (hwnd_) {
+        KillTimer(hwnd_, COOLDOWN_TIMER_ID); // harmless if not armed
+    }
+    if (detector_) {
+        detector_->reset_detection_state();
+    }
+    reset_capture_state_.store(true);
+    is_blocking_active_.store(false, std::memory_order_release);
+    update_ui_state();
+
+    show_notification(
+        L"BadBT: Blocklist Cleared",
+        L"The device blocklist was reset. Keyboard input has been restored.",
+        NIIF_INFO
+    );
+}
+
 void TrayApp::update_tray_tooltip() {
     if (!hwnd_) return;
     std::wstring status = current_status_string();
     if (status == L"Disabled") {
         wcsncpy_s(nid_.szTip, L"BadBT Keystroke Injection Shield (Stopped)", _TRUNCATE);
-    } else if (status == L"Cooldown") {
-        wcsncpy_s(nid_.szTip, L"BadBT Keystroke Injection Shield (Cooldown)", _TRUNCATE);
+    } else if (status == L"Blocked") {
+        std::wstring tip = L"BadBT Shield - BLOCKED ("
+            + std::to_wstring(blocklist_.size()) + L" device(s)) - Reset to restore input";
+        wcsncpy_s(nid_.szTip, tip.c_str(), _TRUNCATE);
     } else {
         wcsncpy_s(nid_.szTip, L"BadBT Keystroke Injection Shield (Active)", _TRUNCATE);
     }
@@ -452,13 +536,14 @@ void TrayApp::on_detector_alert() {
 
     show_notification(
         L"BadBT: Keystroke Injection Detected!",
-        L"Suspicious rapid automated keystrokes detected on Bluetooth keyboard (P >= 0.95).",
+        L"Suspicious device blocklisted (P >= 0.95). Keyboard input is blocked until you "
+        L"open BadBT and click Reset.",
         NIIF_WARNING | NIIF_LARGE_ICON
     );
 
-    // Arm 30-second cooldown timer on UI thread to reset back to Monitoring when cooldown expires
+    // Block-until-Reset: no auto-cooldown timer is armed. Blocking persists (is_blocking_active_
+    // stays true) until the user clicks Reset. Just refresh the UI to reflect the new state.
     if (hwnd_) {
-        SetTimer(hwnd_, COOLDOWN_TIMER_ID, static_cast<UINT>(config_.cooldown_seconds * 1000), nullptr);
         update_ui_state();
     }
 }
@@ -492,8 +577,8 @@ void TrayApp::show_context_menu() {
     std::wstring cur = current_status_string();
     if (cur == L"Disabled") {
         status_str = L"Status: Stopped (Paused)";
-    } else if (cur == L"Cooldown") {
-        status_str = L"Status: Cooldown (Shield Active)";
+    } else if (cur == L"Blocked") {
+        status_str = L"Status: Blocked (" + std::to_wstring(blocklist_.size()) + L" device(s))";
     } else {
         status_str = L"Status: Running (Monitoring)";
     }
@@ -506,7 +591,14 @@ void TrayApp::show_context_menu() {
         : L"Enable Detection";
     AppendMenuW(hMenu, MF_STRING, IDM_TOGGLE, toggle_str.c_str());
 
-    // 4. Test Alert notification trigger
+    // 4. Reset Blocklist (grayed when nothing is blocklisted)
+    UINT reset_flags = MF_STRING | (blocklist_.empty() ? (MF_GRAYED | MF_DISABLED) : 0);
+    std::wstring reset_str = blocklist_.empty()
+        ? L"Reset Blocklist"
+        : (L"Reset Blocklist (" + std::to_wstring(blocklist_.size()) + L")");
+    AppendMenuW(hMenu, reset_flags, IDM_RESET_BLOCKLIST, reset_str.c_str());
+
+    // 5. Test Alert notification trigger
     AppendMenuW(hMenu, MF_STRING, IDM_TEST_NOTIFICATION, L"Trigger Test Alert");
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
 
@@ -639,7 +731,7 @@ LRESULT CALLBACK TrayApp::wndproc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
             std::wstring status = app->current_status_string();
             if (status == L"Disabled") {
                 SetTextColor(hdcStatic, RGB(110, 110, 110)); // Gray
-            } else if (status == L"Cooldown") {
+            } else if (status == L"Blocked") {
                 SetTextColor(hdcStatic, RGB(220, 20, 20));   // Red
             } else {
                 SetTextColor(hdcStatic, RGB(0, 140, 20));    // Green
@@ -663,6 +755,10 @@ LRESULT CALLBACK TrayApp::wndproc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
         case IDC_BTN_TOGGLE:
             app->toggle_detection();
             return 0;
+        case IDM_RESET_BLOCKLIST:
+        case IDC_BTN_RESET:
+            app->reset_blocklist();
+            return 0;
         case IDM_TEST_NOTIFICATION:
         case IDC_BTN_TEST_ALERT:
             PostMessageW(hwnd, WM_TEST_NOTIFICATION, 0, 0);
@@ -685,16 +781,9 @@ LRESULT CALLBACK TrayApp::wndproc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
             app->shutdown();
             PostQuitMessage(0);
             return 0;
-        } else if (wParam == COOLDOWN_TIMER_ID) {
-            KillTimer(hwnd, COOLDOWN_TIMER_ID);
-            if (app->detector()) {
-                app->detector()->reset_detection_state();
-            }
-            app->reset_capture_state();
-            app->set_blocking_active(false);
-            app->update_ui_state();
-            return 0;
         }
+        // COOLDOWN_TIMER_ID is no longer armed: blocking persists until the user clicks
+        // Reset (block-until-Reset model), so there is no timer-driven auto-unblock.
         break;
 
     case WM_CLOSE:
